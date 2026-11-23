@@ -1,0 +1,43 @@
+name: Build AndroidAutoMaker APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Android SDK Platform 36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Configure Gradle for Linux and generate keystore
+        working-directory: android
+        run: |
+          sed -i '/^org\.gradle\.java\.home=/d' gradle.properties
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          keytool -genkeypair -keystore release.keystore -alias automaker \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass automaker -keypass automaker \
+            -dname "CN=Android Auto Maker, OU=Local, O=Local, C=US"
+          chmod +x gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew :app:assembleRelease
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidAutoMaker-release
+          path: android/app/build/outputs/apk/release/app-release.apk
